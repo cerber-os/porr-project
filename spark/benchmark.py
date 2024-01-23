@@ -2,6 +2,7 @@ import argparse
 import multiprocessing
 import os
 import subprocess
+import re
 
 from time import time_ns
 import matplotlib.pyplot as plt
@@ -15,10 +16,10 @@ def createTestInputFile(name: str, size: int):
     os.system(f'dd if=/dev/urandom of={name} bs=4096 count={size // 4096} 2>/dev/null')
 
 def runDesSpark(args: list) -> float:
-    startTime = time_ns()
-    subprocess.run(['python3', 'DESSpark.py'] + args, stdout=subprocess.DEVNULL, stderr = subprocess.DEVNULL)
-    endTime = time_ns()
-    return (endTime - startTime) / 1_000_000_000
+    proc = subprocess.run(['python3', 'DESSpark.py'] + args, capture_output=True)
+    match = re.search(r'\d+\.\d+', proc.stdout.decode())
+    return float(match.group(0))
+
 
 
 ###############################
@@ -32,7 +33,7 @@ def coresBenchmark():
     print("Starting cores count benchmark...")
     for i in tqdm(range(1, coresCount+1), total=coresCount):
         subtimes = []
-        for _ in range(3):
+        for _ in range(5):
             time = runDesSpark([
                 '-c', str(i),
                 '-m', 'enc',
@@ -57,13 +58,12 @@ def coresBenchmark():
 def inputSizeBenchmark():
     times = []
     coresCount = multiprocessing.cpu_count() // 2
-    
     print('Starting input size benchmark...')
     for i in tqdm(range(10_000, 100_001, 10_000), total=10):
         subtimes = []
         createTestInputFile('test_input_file.txt', i)
 
-        for i in range(3):
+        for i in range(5):
             time = runDesSpark([
                 '-c', str(coresCount),
                 '-m', 'enc',
@@ -71,7 +71,6 @@ def inputSizeBenchmark():
                 'test_input_file.txt',
                 'test_output_file.txt'])
             subtimes.append(time)
-        
         os.unlink('test_input_file.txt')
         os.unlink('test_output_file.txt')
         times.append(sum(subtimes) / len(subtimes))
@@ -87,7 +86,6 @@ def inputSizeBenchmark():
 def testValid():
     coresCount = multiprocessing.cpu_count() // 2
     createTestInputFile('test_input_file.txt', 50_000)
-    
     # Encrypt
     runDesSpark([
                 '-c', str(coresCount),
@@ -95,7 +93,6 @@ def testValid():
                 '-k', '0', '0', '0',
                 'test_input_file.txt',
                 'test_output_file.txt'])
-    
     # Decrypt
     runDesSpark([
                 '-c', str(coresCount),
@@ -103,12 +100,10 @@ def testValid():
                 '-k', '0', '0', '0',
                 'test_output_file.txt',
                 'test_final_file.txt'])
-    
     with open('test_input_file.txt', 'rb') as f:
         orig = f.read()
     with open('test_final_file.txt', 'rb') as f:
         dec = f.read()
-    
     if orig == dec:
         print('Test success')
         os.unlink('test_input_file.txt')
@@ -116,7 +111,6 @@ def testValid():
         os.unlink('test_final_file.txt')
     else:
         print('Test failed - files differ')
-    
 
 
 ###############################

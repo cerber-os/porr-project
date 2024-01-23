@@ -8,8 +8,10 @@ import sys
 from pyspark import SparkContext, SparkConf
 from typing import List
 
+# For C bindings
 # import libpydes
 import pyDes
+from time import time
 
 def setLogsVerbosity(level: int) -> None:
     targetLevel = {
@@ -53,11 +55,15 @@ def encryptBlock(x):
     if x is None:
         return x
     
-    # For C bindings:
-    # input = int.from_bytes(x)
-    # output = libpydes.encryptBlock(mydes, input)
-    # return output.values.to_bytes(8)
-    #return mydes.encrypt(x)
+    # For C bindings
+    # for block in x:
+    #     out = b''
+    #     for slice in [block[i:i+8] for i in range(0, len(block), 8)]:
+    #         input = int.from_bytes(slice)
+    #         output = libpydes.encryptBlock(None, input)
+    #         out += output.to_bytes(8)
+    #     yield out
+
     for block in x:
         yield mydes.encrypt(block)
 
@@ -65,7 +71,15 @@ def decryptBlock(x):
     if x is None:
         return x
     
-    # return mydes.decrypt(x)
+    # For C bindings
+    # for block in x:
+    #     out = b''
+    #     for slice in [block[i:i+8] for i in range(0, len(block), 8)]:
+    #         input = int.from_bytes(slice)
+    #         output = libpydes.decryptBlock(None, input)
+    #         out += output.to_bytes(8)
+    #     yield out
+
     for block in x:
         yield mydes.decrypt(block)
 
@@ -96,12 +110,15 @@ def main():
 
     # Setup Py3DES library
     k = b''.join([key.to_bytes(8) for key in keys])
+    # For C bindings
+    # mydes = libpydes.createPyDES(*keys)
     mydes = pyDes.triple_des(k, pyDes.ECB)
 
     # Setup Apache Spark and load input data
     spark = createSpark(args.cores)
     logging.info("Created Apache Spark instance")
 
+    start = time()
     if args.INPUT == '-':
         fp = tempfile.NamedTemporaryFile(delete=False)
         while True:
@@ -138,6 +155,8 @@ def main():
              f.write(record)
     logging.info(f'Saved results to "{args.OUTPUT}"')
 
+    end = time()
+    print(f'Time spent: {end - start}')
     # Delete temp file
     if args.INPUT == '-':
         os.unlink(fp.name)
